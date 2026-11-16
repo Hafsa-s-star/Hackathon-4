@@ -6,10 +6,13 @@ import appointmentRoutes from "./routes/appointment.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import doctorRoutes from "./routes/doctor.routes.js";
 
+const frontendOrigin = new URL(
+    process.env.FRONTEND_URL || "https://frontend-hafsa.vercel.app"
+).origin;
 const app = express();
 
 app.use(cors({
-    origin: process.env.FRONTEND_URL || "https://frontend-hafsa.vercel.app",
+    origin: frontendOrigin,
     credentials: true,
 }));
 app.use(express.json({ limit: "1mb" }));
