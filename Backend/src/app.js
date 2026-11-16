@@ -9,7 +9,7 @@ import doctorRoutes from "./routes/doctor.routes.js";
 const app = express();
 
 app.use(cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: process.env.FRONTEND_URL || "https://frontend-mpaud9xjs-hafsa-a943.vercel.app",
     credentials: true,
 }));
 app.use(express.json({ limit: "1mb" }));
