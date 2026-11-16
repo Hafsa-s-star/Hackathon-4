@@ -9,7 +9,16 @@ export function getErrorMessage(error) {
     if (!error.response) {
         return "We can't reach the clinic server. Start the backend and configure Backend/.env, then try again.";
     }
-    return error.response.data?.message || "We couldn't complete that request. Please try again.";
+    if (error.response.data?.message) {
+        return error.response.data.message;
+    }
+    if (error.response.status === 404) {
+        return `The clinic API route was not found (${error.config?.url || "unknown route"}). Check the API URL and restart the backend.`;
+    }
+    if (error.response.status >= 500) {
+        return `The clinic server returned an error (${error.response.status}). Check the Backend terminal for details.`;
+    }
+    return `The request failed with HTTP ${error.response.status}. Check the API response and try again.`;
 }
 
 export default api;

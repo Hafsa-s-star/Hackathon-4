@@ -21,6 +21,10 @@ app.use("/api/doctors", doctorRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/admin", adminRoutes);
 
+app.use((req, res) => {
+    return res.status(404).json({ message: `API route ${req.method} ${req.path} was not found.` });
+});
+
 app.use((error, req, res, next) => {
     console.error(error);
     if (error.code === 11000) {
