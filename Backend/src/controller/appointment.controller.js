@@ -92,7 +92,11 @@ export async function updateAppointmentStatus(req, res, next) {
             return res.status(400).json({ message: "Status must be approved or rejected." });
         }
         const appointment = await appointmentsModel.findOneAndUpdate(
-            { _id: req.params.id, doctor: req.user._id, status: "pending" },
+            {
+                _id: req.params.id,
+                ...(req.user.role === "admin" ? {} : { doctor: req.user._id }),
+                status: "pending",
+            },
             { status },
             { new: true, runValidators: true },
         ).populate(appointmentDetails);

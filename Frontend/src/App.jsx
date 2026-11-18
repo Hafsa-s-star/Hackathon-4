@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import api from "./api.js";
+import api, { getErrorMessage } from "./api.js";
+import { showAlert } from "./alerts.js";
 import AdminDashboard from "./components/AdminDashboard.jsx";
 import AuthPage from "./components/AuthPage.jsx";
 import DoctorDashboard from "./components/DoctorDashboard.jsx";
@@ -42,6 +43,8 @@ export default function App() {
     async function signOut() {
         try {
             await api.post("/auth/logout");
+        } catch (requestError) {
+            showAlert("error", getErrorMessage(requestError));
         } finally {
             setUser(null);
             setPage("overview");

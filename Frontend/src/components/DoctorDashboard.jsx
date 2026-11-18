@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import api, { getErrorMessage } from "../api.js";
+import { showAlert } from "../alerts.js";
 import AppointmentList from "./AppointmentList.jsx";
 import StatCard from "./StatCard.jsx";
 
 export default function DoctorDashboard({ user, page }) {
     const [appointments, setAppointments] = useState([]);
-    const [error, setError] = useState("");
-    const [notice, setNotice] = useState("");
 
     useEffect(() => {
         api.get("/appointments/doctor")
             .then(({ data }) => setAppointments(data.appointments))
-            .catch((requestError) => setError(getErrorMessage(requestError)));
+            .catch((requestError) => showAlert("error", getErrorMessage(requestError)));
     }, []);
 
     const pending = useMemo(() => appointments.filter((appointment) => appointment.status === "pending"), [appointments]);
@@ -21,18 +20,15 @@ export default function DoctorDashboard({ user, page }) {
         try {
             const { data } = await api.patch(`/appointments/${id}/status`, { status });
             setAppointments((items) => items.map((item) => item._id === id ? data.appointment : item));
-            setNotice(`Appointment ${status}.`);
-            window.setTimeout(() => setNotice(""), 3200);
+            showAlert("success", `Appointment ${status}.`);
         } catch (requestError) {
-            setError(getErrorMessage(requestError));
+            showAlert("error", getErrorMessage(requestError));
         }
     }
 
     return (
         <div className="dashboard-content">
             <div className="page-heading"><div><span className="eyebrow">{page === "requests" ? "YOUR PATIENTS" : "DOCTOR WORKSPACE"}</span><h1>{page === "requests" ? "Appointment requests" : <>Good morning, <em>Dr. {user.name.split(" ")[0]}.</em></>}</h1><p>{page === "requests" ? "Review each request and help your patients take their next step." : `${user.specialization || "Care provider"} · ${user.experience || 0} years of experience`}</p></div></div>
-            {notice && <div className="notice-banner"><span>✓</span>{notice}<button onClick={() => setNotice("")}>×</button></div>}
-            {error && <div className="notice-error" role="alert">{error}<button onClick={() => setError("")}>×</button></div>}
             {page === "overview" && <>
                 <section className="doctor-welcome"><div className="doctor-welcome-mark">✳</div><div><span className="welcome-kicker">YOUR PRACTICE, AT A GLANCE</span><h2>Every good day starts with <em>good care.</em></h2><p>Your patients are counting on you. Here's what's on the calendar.</p></div><span className="doctor-welcome-decoration">+</span></section>
                 <section className="stats-grid">

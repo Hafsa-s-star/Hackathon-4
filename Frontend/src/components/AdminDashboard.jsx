@@ -1,22 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import api, { getErrorMessage } from "../api.js";
+import { confirmAction, showAlert } from "../alerts.js";
 import AppointmentList from "./AppointmentList.jsx";
 import StatCard from "./StatCard.jsx";
 
-function DoctorForm({ onClose, onCreated }) {
-    const [error, setError] = useState("");
+function DoctorForm({ doctor, onClose, onSaved }) {
     const [submitting, setSubmitting] = useState(false);
 
     async function handleSubmit(event) {
         event.preventDefault();
-        setError("");
         setSubmitting(true);
         const values = Object.fromEntries(new FormData(event.currentTarget).entries());
         try {
-            await api.post("/admin/doctors", values);
-            onCreated();
+            if (doctor) {
+                await api.patch(`/admin/doctors/${doctor._id}`, values);
+            } else {
+                await api.post("/admin/doctors", values);
+            }
+            await onSaved(doctor);
         } catch (requestError) {
-            setError(getErrorMessage(requestError));
+            showAlert("error", getErrorMessage(requestError));
         } finally {
             setSubmitting(false);
         }
@@ -26,19 +29,18 @@ function DoctorForm({ onClose, onCreated }) {
         <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
             <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="doctor-form-title">
                 <button className="modal-close" onClick={onClose} aria-label="Close dialog">×</button>
-                <span className="eyebrow">GROW YOUR CARE TEAM</span><h2 id="doctor-form-title">Add a doctor</h2>
-                <p className="modal-subtitle">Create a secure account for a new specialist.</p>
+                <span className="eyebrow">{doctor ? "KEEP YOUR CARE TEAM UP TO DATE" : "GROW YOUR CARE TEAM"}</span><h2 id="doctor-form-title">{doctor ? "Edit doctor profile" : "Add a doctor"}</h2>
+                <p className="modal-subtitle">{doctor ? "Update this specialist's details." : "Create a secure account for a new specialist."}</p>
                 <form className="modal-form" onSubmit={handleSubmit}>
-                    <label>Full name<input name="name" placeholder="e.g. Alex Morgan" required /></label>
-                    <label>Email address<input name="email" type="email" placeholder="doctor@wellnest.care" required /></label>
+                    <label>Full name<input name="name" defaultValue={doctor?.name || ""} placeholder="e.g. Alex Morgan" required /></label>
+                    <label>Email address<input name="email" type="email" defaultValue={doctor?.email || ""} placeholder="doctor@wellnest.care" required /></label>
                     <div className="form-grid">
-                        <label>Specialization<input name="specialization" placeholder="e.g. Cardiology" required /></label>
-                        <label>Years of experience<input name="experience" type="number" min="0" defaultValue="0" required /></label>
+                        <label>Specialization<input name="specialization" defaultValue={doctor?.specialization || ""} placeholder="e.g. Cardiology" required /></label>
+                        <label>Years of experience<input name="experience" type="number" min="0" defaultValue={doctor?.experience ?? 0} required /></label>
                     </div>
-                    <label>Phone number<input name="phone" type="tel" placeholder="Optional" /></label>
-                    <label>Temporary password<input name="password" type="password" minLength="8" placeholder="At least 8 characters" required /></label>
-                    {error && <p className="form-error">{error}</p>}
-                    <button className="button button-primary modal-submit" disabled={submitting}>{submitting ? "Creating account..." : "Create doctor account"} <span>→</span></button>
+                    <label>Phone number<input name="phone" type="tel" defaultValue={doctor?.phone || ""} placeholder="Optional" /></label>
+                    {!doctor && <label>Temporary password<input name="password" type="password" minLength="8" placeholder="At least 8 characters" required /></label>}
+                    <button className="button button-primary modal-submit" disabled={submitting}>{submitting ? "Saving..." : doctor ? "Save profile" : "Create doctor account"} <span>→</span></button>
                 </form>
             </section>
         </div>
@@ -53,8 +55,7 @@ export default function AdminDashboard({ page }) {
     const [appointmentSearch, setAppointmentSearch] = useState("");
     const [userType, setUserType] = useState("all");
     const [showDoctorForm, setShowDoctorForm] = useState(false);
-    const [error, setError] = useState("");
-    const [notice, setNotice] = useState("");
+    const [editingDoctor, setEditingDoctor] = useState(null);
 
     function loadDashboard() {
         return Promise.all([api.get("/admin/stats"), api.get("/admin/users")])
@@ -65,14 +66,14 @@ export default function AdminDashboard({ page }) {
     }
 
     useEffect(() => {
-        loadDashboard().catch((requestError) => setError(getErrorMessage(requestError)));
+        loadDashboard().catch((requestError) => showAlert("error", getErrorMessage(requestError)));
     }, []);
 
     useEffect(() => {
         const patientName = page === "appointments" ? appointmentSearch.trim() : "";
         api.get("/admin/appointments", { params: patientName ? { patientName } : {} })
             .then(({ data }) => setAppointments(data.appointments))
-            .catch((requestError) => setError(getErrorMessage(requestError)));
+            .catch((requestError) => showAlert("error", getErrorMessage(requestError)));
     }, [page, appointmentSearch]);
 
     const visibleUsers = useMemo(() => users.filter((user) => {
@@ -86,35 +87,45 @@ export default function AdminDashboard({ page }) {
         try {
             await api.patch(`/admin/users/${user._id}/status`, { isActive });
             setUsers((items) => items.map((item) => item._id === user._id ? { ...item, isActive } : item));
-            setNotice(`${user.name}'s account ${isActive ? "activated" : "deactivated"}.`);
+            showAlert("success", `${user.name}'s account ${isActive ? "activated" : "deactivated"}.`);
         } catch (requestError) {
-            setError(getErrorMessage(requestError));
+            showAlert("error", getErrorMessage(requestError));
         }
     }
 
     async function removeUser(user) {
-        if (!window.confirm(`Permanently delete ${user.name}'s account and appointments?`)) return;
+        const confirmation = await confirmAction(`Permanently delete ${user.name}'s account and appointments?`);
+        if (!confirmation.isConfirmed) return;
         try {
             await api.delete(`/admin/users/${user._id}`);
-            await loadDashboard();
             setAppointments((items) => items.filter((item) => item.patient?._id !== user._id && item.doctor?._id !== user._id));
-            setNotice(`${user.name}'s account was deleted.`);
+            showAlert("success", `${user.name}'s account was deleted.`);
+            await loadDashboard().catch((requestError) => showAlert("error", getErrorMessage(requestError)));
         } catch (requestError) {
-            setError(getErrorMessage(requestError));
+            showAlert("error", getErrorMessage(requestError));
         }
     }
 
-    async function doctorCreated() {
+    async function doctorSaved(doctor) {
         setShowDoctorForm(false);
-        await loadDashboard();
-        setNotice("Doctor account created. They can now sign in.");
+        setEditingDoctor(null);
+        showAlert("success", doctor ? "Doctor profile updated." : "Doctor account created. They can now sign in.");
+        await loadDashboard().catch((requestError) => showAlert("error", getErrorMessage(requestError)));
+    }
+
+    async function updateAppointmentStatus(id, status) {
+        try {
+            const { data } = await api.patch(`/admin/appointments/${id}/status`, { status });
+            setAppointments((items) => items.map((item) => item._id === id ? data.appointment : item));
+            showAlert("success", `Appointment ${status}.`);
+        } catch (requestError) {
+            showAlert("error", getErrorMessage(requestError));
+        }
     }
 
     return (
         <div className="dashboard-content">
             <div className="page-heading"><div><span className="eyebrow">CLINIC OVERVIEW</span><h1>{page === "users" ? "People & accounts" : page === "appointments" ? "All appointments" : <>The heart of <em>wellnest.</em></>}</h1><p>{page === "users" ? "Manage the people who make great care possible." : page === "appointments" ? "A clear view of every patient visit." : "A healthy clinic starts with a clear picture."}</p></div>{page !== "appointments" && <button className="button button-primary" onClick={() => setShowDoctorForm(true)}><span>＋</span> Add a doctor</button>}</div>
-            {notice && <div className="notice-banner"><span>✓</span>{notice}<button onClick={() => setNotice("")}>×</button></div>}
-            {error && <div className="notice-error" role="alert">{error}<button onClick={() => setError("")}>×</button></div>}
             {page === "overview" && <>
                 <section className="admin-welcome"><div><span className="welcome-kicker">A LITTLE GOOD GOES A LONG WAY</span><h2>Care is a team effort.<br /><em>Look at yours go.</em></h2><p>Here's a look at the people and appointments behind your clinic.</p></div><div className="admin-welcome-art"><span>✳</span><span>♡</span><span>✳</span></div></section>
                 <section className="stats-grid">
@@ -137,16 +148,17 @@ export default function AdminDashboard({ page }) {
                         <td><span className={`role-label ${user.role}`}>{user.role}</span></td>
                         <td className="table-contact">{user.email}</td>
                         <td><span className={`account-status ${user.isActive ? "active" : "inactive"}`}><i />{user.isActive ? "Active" : "Inactive"}</span></td>
-                        <td>{user.role === "admin" ? <span className="account-status">Administrator</span> : <div className="table-actions"><button onClick={() => setActive(user, !user.isActive)}>{user.isActive ? "Deactivate" : "Activate"}</button><button className="delete-action" onClick={() => removeUser(user)}>Delete</button></div>}</td>
+                        <td>{user.role === "admin" ? <span className="account-status">Administrator</span> : <div className="table-actions">{user.role === "doctor" && <button onClick={() => setEditingDoctor(user)}>Edit</button>}<button onClick={() => setActive(user, !user.isActive)}>{user.isActive ? "Deactivate" : "Activate"}</button><button className="delete-action" onClick={() => removeUser(user)}>Delete</button></div>}</td>
                     </tr>)}
                     {!visibleUsers.length && <tr><td className="table-empty" colSpan="5">No people match your search.</td></tr>}
                 </tbody></table></div>
             </section>}
             {(page === "overview" || page === "appointments") && <section className={`content-section ${page === "appointments" ? "first-section" : ""}`}>
                 <div className="section-heading"><div><span className="eyebrow">THE CLINIC CALENDAR</span><h2>{page === "overview" ? "Recent appointments" : "Every visit, at a glance"}</h2></div>{page === "appointments" && <label className="search-box search-small"><span>⌕</span><input value={appointmentSearch} onChange={(event) => setAppointmentSearch(event.target.value)} placeholder="Search patient name" aria-label="Search appointments by patient name" /></label>}</div>
-                <AppointmentList appointments={page === "overview" ? appointments.slice(0, 5) : appointments} role="admin" emptyMessage="Appointments will appear here as soon as they're booked." />
+                <AppointmentList appointments={page === "overview" ? appointments.slice(0, 5) : appointments} role="admin" onStatusChange={updateAppointmentStatus} emptyMessage="Appointments will appear here as soon as they're booked." />
             </section>}
-            {showDoctorForm && <DoctorForm onClose={() => setShowDoctorForm(false)} onCreated={doctorCreated} />}
+            {showDoctorForm && <DoctorForm onClose={() => setShowDoctorForm(false)} onSaved={doctorSaved} />}
+            {editingDoctor && <DoctorForm doctor={editingDoctor} onClose={() => setEditingDoctor(null)} onSaved={doctorSaved} />}
         </div>
     );
 }

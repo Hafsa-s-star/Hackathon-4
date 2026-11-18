@@ -43,7 +43,7 @@ export default function AppointmentList({ appointments, role, onCancel, onStatus
                         <div className="appointment-actions">
                             <StatusBadge status={appointment.status} />
                             {role === "patient" && appointment.status === "pending" && <button className="text-button" onClick={() => onCancel(appointment._id)}>Cancel</button>}
-                            {role === "doctor" && appointment.status === "pending" && (
+                            {(role === "doctor" || role === "admin") && appointment.status === "pending" && (
                                 <span className="decision-actions">
                                     <button className="approve-button" onClick={() => onStatusChange(appointment._id, "approved")}>Approve</button>
                                     <button className="reject-button" onClick={() => onStatusChange(appointment._id, "rejected")}>Decline</button>

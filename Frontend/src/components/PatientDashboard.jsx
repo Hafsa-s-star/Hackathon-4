@@ -1,24 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api, { getErrorMessage } from "../api.js";
+import { showAlert } from "../alerts.js";
 import AppointmentList, { StatusBadge } from "./AppointmentList.jsx";
 import DoctorCard from "./DoctorCard.jsx";
 import StatCard from "./StatCard.jsx";
 
 function AppointmentModal({ doctor, onClose, onCreated }) {
-    const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const minDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
     async function handleSubmit(event) {
         event.preventDefault();
         setSubmitting(true);
-        setError("");
         const values = Object.fromEntries(new FormData(event.currentTarget).entries());
         try {
             await api.post("/appointments", { ...values, doctorId: doctor._id });
             onCreated();
         } catch (requestError) {
-            setError(getErrorMessage(requestError));
+            showAlert("error", getErrorMessage(requestError));
         } finally {
             setSubmitting(false);
         }
@@ -38,7 +37,6 @@ function AppointmentModal({ doctor, onClose, onCreated }) {
                         <label>Time<input type="time" name="appointmentTime" required /></label>
                     </div>
                     <label>What would you like help with?<textarea name="reason" placeholder="Share a little about what brings you in..." rows="3" maxLength="500" required /></label>
-                    {error && <p className="form-error">{error}</p>}
                     <button className="button button-primary modal-submit" disabled={submitting}>{submitting ? "Requesting..." : "Request appointment"} <span>→</span></button>
                 </form>
             </section>
@@ -57,8 +55,6 @@ export default function PatientDashboard({ user, page }) {
     const [specialization, setSpecialization] = useState("");
     const [specializations, setSpecializations] = useState([]);
     const [selectedDoctor, setSelectedDoctor] = useState(null);
-    const [notice, setNotice] = useState("");
-    const [error, setError] = useState("");
     const previousStatuses = useRef(null);
 
     const loadAppointments = useCallback(() => api.get("/appointments/my").then(({ data }) => {
@@ -70,7 +66,7 @@ export default function PatientDashboard({ user, page }) {
             ));
             if (updatedAppointment) {
                 const outcome = updatedAppointment.status === "approved" ? "confirmed" : "updated";
-                setNotice(`Dr. ${updatedAppointment.doctor?.name || "Your doctor"} has ${outcome} your appointment.`);
+                showAlert("success", `Dr. ${updatedAppointment.doctor?.name || "Your doctor"} has ${outcome} your appointment.`);
             }
         }
         previousStatuses.current = new Map(nextAppointments.map((appointment) => [appointment._id, appointment.status]));
@@ -83,12 +79,12 @@ export default function PatientDashboard({ user, page }) {
                     setDoctors(data.doctors);
                     setSpecializations(data.specializations);
                 })
-                .catch((requestError) => setError(getErrorMessage(requestError)));
+                .catch((requestError) => showAlert("error", getErrorMessage(requestError)));
         }
     }, [page, search, specialization]);
     useEffect(() => {
         if (page !== "overview" && page !== "appointments") return undefined;
-        const refresh = () => loadAppointments().catch((requestError) => setError(getErrorMessage(requestError)));
+        const refresh = () => loadAppointments().catch((requestError) => showAlert("error", getErrorMessage(requestError)));
         refresh();
         const interval = window.setInterval(refresh, 30000);
         return () => window.clearInterval(interval);
@@ -106,18 +102,16 @@ export default function PatientDashboard({ user, page }) {
         try {
             await api.patch(`/appointments/${id}/cancel`);
             setAppointments((items) => items.map((item) => item._id === id ? { ...item, status: "cancelled" } : item));
-            setNotice("Appointment cancelled.");
-            window.setTimeout(() => setNotice(""), 3200);
+            showAlert("success", "Appointment cancelled.");
         } catch (requestError) {
-            setError(getErrorMessage(requestError));
+            showAlert("error", getErrorMessage(requestError));
         }
     }
 
     async function bookAppointment() {
         setSelectedDoctor(null);
         await loadAppointments();
-        setNotice("Your appointment request is on its way. The clinic will be in touch.");
-        window.setTimeout(() => setNotice(""), 4500);
+        showAlert("success", "Your appointment request is on its way. The clinic will be in touch.");
     }
 
     const isDoctorPage = page === "doctors";
@@ -134,9 +128,6 @@ export default function PatientDashboard({ user, page }) {
                     <label className="specialization-filter"><span className="sr-only">Filter by specialization</span><select value={specialization} onChange={(event) => setSpecialization(event.target.value)}><option value="">All specialties</option>{specializations.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
                 </div>}
             </div>
-            {notice && <div className="notice-banner"><span>✓</span>{notice}<button onClick={() => setNotice("")}>×</button></div>}
-            {error && <div className="notice-error" role="alert">{error}<button onClick={() => setError("")}>×</button></div>}
-
             {page === "overview" && <>
                 <section className="welcome-banner">
                     <div><span className="welcome-kicker">A MOMENT FOR YOU</span><h2>Your health is a journey.<br /><em>We're here for every step.</em></h2><p>Browse trusted specialists and find a time that feels right.</p><button className="button button-dark" onClick={() => window.dispatchEvent(new CustomEvent("wellnest:navigate", { detail: "doctors" }))}>Meet our doctors <span>→</span></button></div>

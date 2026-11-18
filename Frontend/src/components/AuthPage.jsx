@@ -1,15 +1,14 @@
 import { useState } from "react";
 import api from "../api.js";
 import { getErrorMessage } from "../api.js";
+import { showAlert } from "../alerts.js";
 
 export default function AuthPage({ onAuthenticated }) {
     const [mode, setMode] = useState("login");
-    const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
     async function handleSubmit(event) {
         event.preventDefault();
-        setError("");
         setSubmitting(true);
         const form = new FormData(event.currentTarget);
         const payload = Object.fromEntries(form.entries());
@@ -17,7 +16,7 @@ export default function AuthPage({ onAuthenticated }) {
             const { data } = await api.post(`/auth/${mode === "login" ? "login" : "register"}`, payload);
             onAuthenticated(data.user);
         } catch (requestError) {
-            setError(getErrorMessage(requestError));
+            showAlert("error", getErrorMessage(requestError));
         } finally {
             setSubmitting(false);
         }
@@ -53,8 +52,8 @@ export default function AuthPage({ onAuthenticated }) {
                     <h2>{mode === "login" ? "Welcome back" : "Create your account"}</h2>
                     <p className="form-intro">{mode === "login" ? "Sign in to pick up where you left off." : "A few details and you're ready to find your doctor."}</p>
                     <div className="auth-switch" role="tablist" aria-label="Account options">
-                        <button className={mode === "login" ? "selected" : ""} onClick={() => { setMode("login"); setError(""); }}>Sign in</button>
-                        <button className={mode === "register" ? "selected" : ""} onClick={() => { setMode("register"); setError(""); }}>Create account</button>
+                        <button className={mode === "login" ? "selected" : ""} onClick={() => setMode("login")}>Sign in</button>
+                        <button className={mode === "register" ? "selected" : ""} onClick={() => setMode("register")}>Create account</button>
                     </div>
                     <form className="auth-form" onSubmit={handleSubmit}>
                         {mode === "register" && (
@@ -65,7 +64,6 @@ export default function AuthPage({ onAuthenticated }) {
                         )}
                         <label>Email address<input name="email" type="email" placeholder="you@example.com" autoComplete="email" required /></label>
                         <label>Password<input name="password" type="password" placeholder={mode === "register" ? "At least 8 characters" : "Enter your password"} autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={mode === "register" ? 8 : undefined} required /></label>
-                        {error && <p className="form-error" role="alert">{error}</p>}
                         <button className="button button-primary auth-submit" disabled={submitting}>
                             {submitting ? "One moment..." : mode === "login" ? "Sign in to wellnest" : "Create my account"}
                             <span aria-hidden="true">→</span>

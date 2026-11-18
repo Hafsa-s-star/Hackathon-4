@@ -71,6 +71,52 @@ export async function createDoctor(req, res, next) {
     }
 }
 
+export async function updateDoctor(req, res, next) {
+    try {
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            return res.status(400).json({ message: "Invalid doctor ID." });
+        }
+        const { name, email, phone = "", specialization, experience } = req.body;
+        if (
+            typeof name !== "string"
+            || !name.trim()
+            || typeof email !== "string"
+            || !email.trim()
+            || typeof specialization !== "string"
+            || !specialization.trim()
+            || typeof phone !== "string"
+        ) {
+            return res.status(400).json({ message: "Name, email, and specialization are required." });
+        }
+        const years = Number(experience);
+        if (!Number.isFinite(years) || years < 0) {
+            return res.status(400).json({ message: "Experience must be a non-negative number." });
+        }
+        const normalizedEmail = email.trim().toLowerCase();
+        if (await usersModel.exists({ email: normalizedEmail, _id: { $ne: req.params.id } })) {
+            return res.status(409).json({ message: "An account with this email already exists." });
+        }
+        const doctor = await usersModel.findOneAndUpdate(
+            { _id: req.params.id, role: "doctor" },
+            {
+                name: name.trim(),
+                username: normalizedEmail,
+                email: normalizedEmail,
+                phone: phone.trim(),
+                specialization: specialization.trim(),
+                experience: years,
+            },
+            { new: true, runValidators: true },
+        ).select("name email role phone specialization experience isActive");
+        if (!doctor) {
+            return res.status(404).json({ message: "Doctor not found." });
+        }
+        return res.json({ doctor });
+    } catch (error) {
+        return next(error);
+    }
+}
+
 export async function createAdmin(req, res, next) {
     try {
         const { name, email, password, phone = "" } = req.body;
